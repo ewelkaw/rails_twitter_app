@@ -62,4 +62,33 @@ $ rails test
 rails routes
 ```
 
-6. 
+6. Testing
+```bash
+$ spring stop
+$ rails test
+```
+
+7. Merging changes to master and pushing to heroku
+```bash
+$ git add -A
+$ git commit -m "Info about commit"
+$ git checkout master
+$ git merge static-pages
+$ git push
+$ spring stop
+$ rails test
+$ git push heroku
+```
+
+8. Advance testing
+
+Add to test_helper.rb
+```rails
+require "minitest/reporters"
+Minitest::Reporters.use!
+```
+
+Run in terminal:
+```bash
+$ bundle exec guard init
+```
