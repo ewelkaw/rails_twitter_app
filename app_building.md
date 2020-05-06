@@ -56,3 +56,10 @@ In test/controllers/static_pages_controller_test.rb there are some prepared test
 $ rails db:migrate     # Necessary on some systems
 $ rails test
 ```
+
+5. Showing all routes
+```bash
+rails routes
+```
+
+6. 
