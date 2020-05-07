@@ -92,3 +92,48 @@ Run in terminal:
 ```bash
 $ bundle exec guard init
 ```
+
+9. About CSS in app/views/layouts/application.html.erb:
+```ruby
+<%= stylesheet_link_tag 'application', media: 'all',
+                                       'data-turbolinks-track': 'reload' %>
+```
+That means include application.css for all media types (including computer screens and printers).
+
+10. Add application_helper in app/helpers/application_helper.rb:
+
+```ruby
+module ApplicationHelper
+
+  # Returns the full title on a per-page basis.
+  def full_title(page_title = '')
+    base_title = "Ruby on Rails Tutorial Sample App"
+    if page_title.empty?
+      base_title
+    else
+      page_title + " | " + base_title
+    end
+  end
+end
+```
+
+Also in app/views/layouts/application.html.erb:
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= full_title(yield(:title)) %></title>
+    <meta charset="utf-8">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= stylesheet_link_tag 'application', media: 'all',
+                                           'data-turbolinks-track': 'reload' %>
+    <%= javascript_pack_tag 'application', 'data-turbolinks-track': 'reload' %>
+  </head>
+  <body>
+    <%= yield %>
+  </body>
+</html>
+```
+

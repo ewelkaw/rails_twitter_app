@@ -52,3 +52,8 @@ $ git push heroku master
 $ heroku logs         # to see the most recent events
 $ heroku logs --tail  # to see events as they happen, Ctrl-C to quit
 ```
+
+Rails console:
+```bash
+$ rails console
+```
