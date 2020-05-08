@@ -272,7 +272,7 @@ s.class.superclass.superclass
 s.class.superclass.superclass.superclass
 ``` 
 
-14. Creating User class: example_user.rb
+14. Creating User class in main app dir with name: example_user.rb
 ```ruby
 class User
   attr_accessor :name, :email
@@ -286,4 +286,24 @@ class User
     "#{@name} <#{@email}>"
   end
 end
+```
+
+Try it:
+```bash
+$ rails console
+```
+
+```ruby
+require './example_user'
+example = User.new
+example.name                 # nil since attributes[:name] is nil
+example.name = "Example User"           # Assign a non-nil name
+example.email = "user@example.com"      # and a non-nil email address
+example.formatted_email
+
+user = User.new(name: "Michael Hartl", email: "mhartl@example.com")
+user.formatted_email
+```
+```bash
+rm example_user.rb
 ```
