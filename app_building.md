@@ -439,3 +439,218 @@ Add to app/views/users/new.html.erb:
 <h1>Sign up</h1>
 <p>This will be a signup page for new users.</p>
 ```
+
+16. Modeling users
+```bash
+rails generate model User name:string email:string
+rails db:migrate
+```
+
+To CRUD Users:
+```ruby
+### creating and manipulating objects
+User.new
+user = User.new(name: "Michael Hartl", email: "michael@example.com")
+user.valid?
+user.save
+user
+user.name
+user.email
+user.updated_at
+User.create(name: "A Nother", email: "another@example.org")
+foo = User.create(name: "Foo", email: "foo@bar.com")
+foo.destroy
+
+
+### querysets
+User.find(1)    # user with ID 1
+User.find(3)    # user with ID 3
+User.find_by(email: "michael@example.com")
+User.first
+User.all
+
+### updating objects
+user.email = "mhartl@example.net"
+user.save
+
+user.email = "foo@bar.com"  # we need to save
+user.reload.email   # there will be old email shown
+user.created_at
+user.updated_at
+user.update(name: "The Dude", email: "dude@abides.org")   # update and the save in one step and checking validations
+user.update_attribute(:name, "El Duderino")   # update and the save in one step but bypassing validations
+```
+
+17. To test model add to test/models/user_test.rb:
+```ruby
+require 'test_helper'
+
+class UserTest < ActiveSupport::TestCase
+  def setup
+    @user = User.new(name: "Example User", email: "user@example.com")
+  end
+
+  test "should be valid" do
+    assert @user.valid?
+  end
+
+  test "name should be present" do
+    @user.name = "      "
+    assert_not @user.valid?
+  end
+
+  test "email should be present" do
+    @user.email = "     "
+    assert_not @user.valid?
+  end
+
+  test "name should not be too long" do
+    @user.name = "a" * 51
+    assert_not @user.valid?
+  end
+
+  test "email should not be too long" do
+    @user.email = "a" * 244 + "@example.com"
+    assert_not @user.valid?
+  end
+
+  test "email validation should accept valid addresses" do
+    valid_addresses = %w[user@example.com USER@foo.COM A_US-ER@foo.bar.org
+                         first.last@foo.jp alice+bob@baz.cn]
+    valid_addresses.each do |valid_address|
+      @user.email = valid_address
+      assert @user.valid?, "#{valid_address.inspect} should be valid"
+    end
+  end
+
+  test "email addresses should be unique" do
+    duplicate_user = @user.dup
+    duplicate_user.email = @user.email.upcase
+    @user.save
+    assert_not duplicate_user.valid?
+  end
+
+  test "email addresses should be saved as lower-case" do
+    mixed_case_email = "Foo@ExAMPle.CoM"
+    @user.email = mixed_case_email
+    @user.save
+    assert_equal mixed_case_email.downcase, @user.reload.email
+  end
+end
+```
+Run: rails test:models
+
+To avoid errors there need to be modification added to model user.rb:
+```ruby
+class User < ApplicationRecord
+  validates :name,  presence: true, 
+                    length: { maximum: 50 }
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, 
+                    length: { maximum: 255 }, 
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: {case_sensitive: false}
+end
+```
+If we want our search through DB to be faster, we need to add DB index:
+```bash
+$ rails generate migration add_index_to_users_email
+```
+Add to created migration:
+```ruby
+class AddIndexToUsersEmail < ActiveRecord::Migration[6.0]
+  def change
+    add_index :users, :email, unique: true
+  end
+end
+
+```
+```bash
+$ rails db:migrate
+```
+
+18. Modify User model
+```ruby
+class User < ApplicationRecord
+  before_save { self.email = email.downcase } # or { email.downcase! } which works in place
+  validates :name,  presence: true, 
+                    length: { maximum: 50 }
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, 
+                    length: { maximum: 255 }, 
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+end
+```
+19. Adding a hashed password
+Add to User model:
+```ruby
+has_secure_password
+```
+
+```bash
+rails generate migration add_password_digest_to_users password_digest:string
+rails db:migrate
+```
+
+There is migration for this model generated.
+Add bcrypt to the Gemfile.
+```ruby
+gem 'bcrypt',         '3.1.13'
+```
+```bash 
+bundle install
+```
+
+20. Add password validation:
+
+Add to test/models/user_test.rb:
+```ruby
+  test "password should be present (nonblank)" do
+    @user.password = @user.password_confirmation = " " * 6
+    assert_not @user.valid?
+  end
+
+  test "password should have a minimum length" do
+    @user.password = @user.password_confirmation = "a" * 5
+    assert_not @user.valid?
+  end
+```
+
+And to User model:
+```ruby
+class User < ApplicationRecord
+  before_validation { email.downcase! }
+  validates :name,  presence: true, 
+                    length: { maximum: 50 }
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, 
+                    length: { maximum: 255 }, 
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+  validates :password,  presence: true,
+                        length: {minimum: 6}
+  has_secure_password
+end
+```
+
+To play with User model:
+```bash
+rails console
+```
+```ruby
+User.create(name: "Michael Hartl", email: "michael@example.com",
+            password: "foobar", password_confirmation: "foobar")
+user = User.find_by(email: "michael@example.com")
+user = User.find(1)
+user.password_digest
+user.authenticate("not_the_right_password")
+!!user.authenticate("foobar") # !! converts an object to its corresponding boolean value
+
+```
+20. 
+21.
+22.
+23.
+24.
+25.
