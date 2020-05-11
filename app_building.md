@@ -529,6 +529,13 @@ class UserTest < ActiveSupport::TestCase
     @user.save
     assert_not duplicate_user.valid?
   end
+
+  test "email addresses should be saved as lower-case" do
+    mixed_case_email = "Foo@ExAMPle.CoM"
+    @user.email = mixed_case_email
+    @user.save
+    assert_equal mixed_case_email.downcase, @user.reload.email
+  end
 end
 ```
 Run: rails test:models
@@ -562,6 +569,88 @@ end
 $ rails db:migrate
 ```
 
-18.
-19.
-20.
+18. Modify User model
+```ruby
+class User < ApplicationRecord
+  before_save { self.email = email.downcase } # or { email.downcase! } which works in place
+  validates :name,  presence: true, 
+                    length: { maximum: 50 }
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, 
+                    length: { maximum: 255 }, 
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+end
+```
+19. Adding a hashed password
+Add to User model:
+```ruby
+has_secure_password
+```
+
+```bash
+rails generate migration add_password_digest_to_users password_digest:string
+rails db:migrate
+```
+
+There is migration for this model generated.
+Add bcrypt to the Gemfile.
+```ruby
+gem 'bcrypt',         '3.1.13'
+```
+```bash 
+bundle install
+```
+
+20. Add password validation:
+
+Add to test/models/user_test.rb:
+```ruby
+  test "password should be present (nonblank)" do
+    @user.password = @user.password_confirmation = " " * 6
+    assert_not @user.valid?
+  end
+
+  test "password should have a minimum length" do
+    @user.password = @user.password_confirmation = "a" * 5
+    assert_not @user.valid?
+  end
+```
+
+And to User model:
+```ruby
+class User < ApplicationRecord
+  before_validation { email.downcase! }
+  validates :name,  presence: true, 
+                    length: { maximum: 50 }
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, 
+                    length: { maximum: 255 }, 
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+  validates :password,  presence: true,
+                        length: {minimum: 6}
+  has_secure_password
+end
+```
+
+To play with User model:
+```bash
+rails console
+```
+```ruby
+User.create(name: "Michael Hartl", email: "michael@example.com",
+            password: "foobar", password_confirmation: "foobar")
+user = User.find_by(email: "michael@example.com")
+user = User.find(1)
+user.password_digest
+user.authenticate("not_the_right_password")
+!!user.authenticate("foobar") # !! converts an object to its corresponding boolean value
+
+```
+20. 
+21.
+22.
+23.
+24.
+25.
