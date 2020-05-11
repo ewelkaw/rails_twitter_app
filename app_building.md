@@ -646,11 +646,70 @@ user = User.find(1)
 user.password_digest
 user.authenticate("not_the_right_password")
 !!user.authenticate("foobar") # !! converts an object to its corresponding boolean value
-
 ```
-20. 
-21.
-22.
-23.
+21. Heroku push 
+```bash
+$ rails test
+$ git push heroku
+$ heroku run rails db:migrate
+$ git checkout -b sign-up
+$ heroku run rails console --sandbox
+``` 
+
+22. Add debug for dev environment app/views/layouts/application.html.erb:
+```rails
+<!DOCTYPE html>
+<html>
+  .
+  .
+  .
+  <body>
+    <%= render 'layouts/header' %>
+    <div class="container">
+      <%= yield %>
+      <%= render 'layouts/footer' %>
+      <%= debug(params) if Rails.env.development? %>
+    </div>
+  </body>
+</html>
+```
+
+To check env:
+```bash
+rails console       # loads dev environment
+rails console test  # loads test environment
+heroku run rails console  # loads prod environment
+Rails.env
+```
+
+23. Add Users resource
+
+Add to resource.rb:
+```
+resources :users
+```
+
+Add to app/views/users/show.html.erb:
+```ruby
+<%= @user.name %>, <%= @user.email %>
+```
+
+Add to user controller show method:
+```ruby
+class UsersController < ApplicationController
+  def new
+  end
+
+  def show
+    @user = User.find(params[:id])
+    debugger
+  end
+end
+```
+
+Try it:
+```
+http://localhost:3000/users/1
+```
 24.
 25.
