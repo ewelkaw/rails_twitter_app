@@ -1,9 +1,26 @@
 class UsersController < ApplicationController
-  def new
-  end
 
   def show
     @user = User.find(params[:id])
-    debugger
+  end
+
+  def new # GET for form to create new user
+    @user = User.new
+  end
+
+  def create # POST for new user
+    @user = User.new(user_params)    # Not the final implementation!
+    if @user.save
+      # Handle a successful save.
+    else
+      render 'new'
+    end
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:name, :email, :password,
+                                 :password_confirmation)
   end
 end
