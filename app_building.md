@@ -647,10 +647,297 @@ user.password_digest
 user.authenticate("not_the_right_password")
 !!user.authenticate("foobar") # !! converts an object to its corresponding boolean value
 
+# create user with invalid password
+user = User.new(name: "Foo Bar", email: "foo@invalid",
+                 password: "dude", password_confirmation: "dude")
+user.save
+user.errors.full_messages # ["Email is invalid", "Password is too short (minimum is 6 characters)"]
 ```
-20. 
-21.
-22.
-23.
-24.
-25.
+21. Heroku push 
+```bash
+$ rails test
+$ git push heroku
+$ heroku run rails db:migrate
+$ git checkout -b sign-up
+$ heroku run rails console --sandbox
+``` 
+
+22. Add debug for dev environment app/views/layouts/application.html.erb:
+```rails
+<!DOCTYPE html>
+<html>
+  .
+  .
+  .
+  <body>
+    <%= render 'layouts/header' %>
+    <div class="container">
+      <%= yield %>
+      <%= render 'layouts/footer' %>
+      <%= debug(params) if Rails.env.development? %>
+    </div>
+  </body>
+</html>
+```
+
+To check env:
+```bash
+rails console       # loads dev environment
+rails console test  # loads test environment
+heroku run rails console  # loads prod environment
+Rails.env
+```
+
+23. Add Users resource
+
+Add to resource.rb:
+```
+resources :users
+```
+
+Add to app/views/users/show.html.erb:
+```ruby
+<%= @user.name %>, <%= @user.email %>
+```
+
+Add to user controller show method:
+```ruby
+class UsersController < ApplicationController
+  def new
+  end
+
+  def show
+    @user = User.find(params[:id])
+    debugger
+  end
+end
+```
+
+Try it:
+```
+http://localhost:3000/users/1
+```
+24. Add Gravatar image and a sidebar
+
+Add to app/views/users/show.html.erb:
+```ruby
+<% provide(:title, @user.name) %>
+<div class="row">
+  <aside class="col-md-4">
+    <section class="user_info">
+      <h1>
+        <%= gravatar_for @user %>
+        <%= @user.name %>
+      </h1>
+    </section>
+  </aside>
+</div>
+```
+
+Add to app/helpers/users_helper.rb:
+```ruby
+module UsersHelper
+
+  # Returns the Gravatar for the given user.
+  def gravatar_for(user)
+    gravatar_id  = Digest::MD5::hexdigest(user.email.downcase)
+    gravatar_url = "https://secure.gravatar.com/avatar/#{gravatar_id}"
+    image_tag(gravatar_url, alt: user.name, class: "gravatar")
+  end
+end
+```
+25. Signup form
+
+Modify app/controllers/users_controller.rb:
+```ruby
+class UsersController < ApplicationController
+
+  def show
+    @user = User.find(user_params)
+  end
+
+  def new
+    @user = User.new
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:name, :email, :password,
+                                  :password_confirmation)
+  end
+end
+```
+
+Add to app/views/users/new.html.erb:
+```html
+<% provide(:title, "Sign up") %>
+<h1>Sign up</h1>
+
+<div class="row">
+  <div class="col-md-6 col-md-offset-3">
+    <%= form_with(model: @user, local: true) do |f| %>
+      <%= render 'shared/error_messages' %>
+
+      <%= f.label :name %>
+      <%= f.text_field :name, class: 'form-control' %>
+
+      <%= f.label :email %>
+      <%= f.email_field :email, class: 'form-control' %>
+
+      <%= f.label :password %>
+      <%= f.password_field :password, class: 'form-control' %>
+
+      <%= f.label :password_confirmation, "Confirmation" %>
+      <%= f.password_field :password_confirmation, class: 'form-control' %>
+
+      <%= f.submit "Create my account", class: "btn btn-primary" %>
+    <% end %>
+  </div>
+</div>
+```
+
+Add to app/views/shared/_error_messages.html.erb:
+```html
+<% if @user.errors.any? %>
+  <div id="error_explanation">
+    <div class="alert alert-danger">
+      The form contains <%= pluralize(@user.errors.count, "error") %>.
+    </div>
+    <ul>
+    <% @user.errors.full_messages.each do |msg| %>
+      <li><%= msg %></li>
+    <% end %>
+    </ul>
+  </div>
+<% end %>
+```
+
+26. Prepare create method for user controller
+Modify app/controllers/users_controller.rb:
+```ruby
+class UsersController < ApplicationController
+
+  def show
+    @user = User.find(params[:id])
+  end
+
+  def new
+    @user = User.new
+  end
+
+  def create
+    @user = User.new(user_params)
+    if @user.save
+      flash[:success] = "Welcome to the Sample App!"
+      redirect_to @user # the same as redirect_to user_url(@user)
+    else
+      render 'new'
+    end
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:name, :email, :password,
+                                 :password_confirmation)
+  end
+end
+```
+27. A test for invalid submission
+```bash
+rails generate integration_test users_signup
+```
+
+Add to test/integration/users_signup_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersSignupTest < ActionDispatch::IntegrationTest
+
+  test "invalid signup information" do
+    get signup_path
+    assert_no_difference 'User.count' do
+      post users_path, params: { user: { name:  "",
+                                         email: "user@invalid",
+                                         password:              "foo",
+                                         password_confirmation: "bar" } }
+    end
+    assert_template 'users/new'
+  end
+
+  test "valid signup information" do
+    get signup_path
+    assert_difference 'User.count', 1 do
+      post users_path, params: { user: { name:  "Example User",
+                                         email: "user@example.com",
+                                         password:              "password",
+                                         password_confirmation: "password" } }
+    end
+    follow_redirect!
+    assert_template 'users/show'
+  end
+end
+```
+
+Add to app/views/layouts/application.html.erb:
+```html
+<!DOCTYPE html>
+<html>
+  .
+  .
+  .
+  <body>
+    <%= render 'layouts/header' %>
+    <div class="container">
+      <% flash.each do |message_type, message| %>
+        <div class="alert alert-<%= message_type %>"><%= message %></div>
+      <% end %>
+      <%= yield %>
+      <%= render 'layouts/footer' %>
+      <%= debug(params) if Rails.env.development? %>
+    </div>
+    .
+    .
+    .
+  </body>
+</html>
+```
+
+28. SSL in production
+
+Uncomment in config/environments/production.rb:
+```ruby
+Rails.application.configure do
+  .
+  .
+  .
+  # Force all access to the app over SSL, use Strict-Transport-Security,
+  # and use secure cookies.
+  config.force_ssl = true
+  .
+  .
+  .
+end
+```
+Modify config/puma.rb:
+```ruby
+# Puma configuration file.
+max_threads_count = ENV.fetch("RAILS_MAX_THREADS") { 5 }
+min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { max_threads_count }
+threads min_threads_count, max_threads_count
+port        ENV.fetch("PORT") { 3000 }
+environment ENV.fetch("RAILS_ENV") { ENV['RACK_ENV'] || "development" }
+pidfile ENV.fetch("PIDFILE") { "tmp/pids/server.pid" }
+workers ENV.fetch("WEB_CONCURRENCY") { 2 }
+preload_app!
+plugin :tmp_restart
+```
+
+We also need to make a so-called Procfile to tell Heroku to run a Puma process in production. We should add 
+Procfile and code from below:
+```ruby
+web: bundle exec puma -C config/puma.rb
+```
+29. 
+30.
