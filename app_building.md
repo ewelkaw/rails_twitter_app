@@ -771,6 +771,7 @@ end
 
 Add to app/views/users/new.html.erb:
 ```html
+<% provide(:title, "Sign up") %>
 <h1>Sign up</h1>
 
 <div class="row">
@@ -826,16 +827,117 @@ class UsersController < ApplicationController
   end
 
   def create
-    @user = User.new(params[:user])    # Not the final implementation!
+    @user = User.new(user_params)
     if @user.save
-      # Handle a successful save.
+      flash[:success] = "Welcome to the Sample App!"
+      redirect_to @user # the same as redirect_to user_url(@user)
     else
       render 'new'
     end
   end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:name, :email, :password,
+                                 :password_confirmation)
+  end
 end
 ```
-27.
-28.
-29.
+27. A test for invalid submission
+```bash
+rails generate integration_test users_signup
+```
+
+Add to test/integration/users_signup_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersSignupTest < ActionDispatch::IntegrationTest
+
+  test "invalid signup information" do
+    get signup_path
+    assert_no_difference 'User.count' do
+      post users_path, params: { user: { name:  "",
+                                         email: "user@invalid",
+                                         password:              "foo",
+                                         password_confirmation: "bar" } }
+    end
+    assert_template 'users/new'
+  end
+
+  test "valid signup information" do
+    get signup_path
+    assert_difference 'User.count', 1 do
+      post users_path, params: { user: { name:  "Example User",
+                                         email: "user@example.com",
+                                         password:              "password",
+                                         password_confirmation: "password" } }
+    end
+    follow_redirect!
+    assert_template 'users/show'
+  end
+end
+```
+
+Add to app/views/layouts/application.html.erb:
+```html
+<!DOCTYPE html>
+<html>
+  .
+  .
+  .
+  <body>
+    <%= render 'layouts/header' %>
+    <div class="container">
+      <% flash.each do |message_type, message| %>
+        <div class="alert alert-<%= message_type %>"><%= message %></div>
+      <% end %>
+      <%= yield %>
+      <%= render 'layouts/footer' %>
+      <%= debug(params) if Rails.env.development? %>
+    </div>
+    .
+    .
+    .
+  </body>
+</html>
+```
+
+28. SSL in production
+
+Uncomment in config/environments/production.rb:
+```ruby
+Rails.application.configure do
+  .
+  .
+  .
+  # Force all access to the app over SSL, use Strict-Transport-Security,
+  # and use secure cookies.
+  config.force_ssl = true
+  .
+  .
+  .
+end
+```
+Modify config/puma.rb:
+```ruby
+# Puma configuration file.
+max_threads_count = ENV.fetch("RAILS_MAX_THREADS") { 5 }
+min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { max_threads_count }
+threads min_threads_count, max_threads_count
+port        ENV.fetch("PORT") { 3000 }
+environment ENV.fetch("RAILS_ENV") { ENV['RACK_ENV'] || "development" }
+pidfile ENV.fetch("PIDFILE") { "tmp/pids/server.pid" }
+workers ENV.fetch("WEB_CONCURRENCY") { 2 }
+preload_app!
+plugin :tmp_restart
+```
+
+We also need to make a so-called Procfile to tell Heroku to run a Puma process in production. We should add 
+Procfile and code from below:
+```ruby
+web: bundle exec puma -C config/puma.rb
+```
+29. 
 30.
