@@ -939,5 +939,63 @@ Procfile and code from below:
 ```ruby
 web: bundle exec puma -C config/puma.rb
 ```
-29. 
-30.
+29. Sessions controller
+```bash
+$ rails generate controller Sessions new
+```
+Add to config/routes.rb:
+```ruby
+  get    '/login',   to: 'sessions#new'
+  post   '/login',   to: 'sessions#create'
+  delete '/logout',  to: 'sessions#destroy'
+```
+30. Login form
+
+Add to app/views/sessions/new.html.erb:
+```ruby
+<% provide(:title, 'Log in') %>
+<h1>Log in</h1>
+
+<div class="row">
+  <div class="col-md-6 col-md-offset-3">
+    <%= form_with(url: login_path, scope: :session, local: true) do |f| %>
+
+      <%= f.label :email %>
+      <%= f.email_field :email %>
+
+      <%= f.label :password %>
+      <%= f.password_field :password %>
+
+      <%= f.submit "Log in", class: "btn btn-primary" %>
+    <% end %>
+    <p>New user? <%= link_to "Sign up now!", signup_path %></p>
+  </div>
+</div>
+```
+
+Add to app/controllers/sessions_controller.rb:
+```ruby
+class SessionsController < ApplicationController
+
+  def new
+  end
+
+  def create
+    render 'new'
+  end
+
+  def destroy
+  end
+end
+```
+
+31. 
+32. 
+33.
+34.
+35.
+36.
+37.
+38.
+39.
+40.
