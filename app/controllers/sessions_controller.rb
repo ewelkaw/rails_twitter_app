@@ -3,7 +3,12 @@ class SessionsController < ApplicationController
   end
 
   def create
-    render 'new'
+    user = User.find_by(email: session_params[:email])
+    if user && user.authenticate(session_params[:password])
+      redirect root_path
+    else
+      render 'new'
+    end
   end
 
   def destroy
@@ -11,6 +16,6 @@ class SessionsController < ApplicationController
 
   private
   def session_params
-    params.require(:email, :password).permit(:email, :password)
+    params.require(:session).permit(:email, :password)
   end
 end
