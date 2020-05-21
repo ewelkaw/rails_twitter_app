@@ -976,21 +976,98 @@ Add to app/views/sessions/new.html.erb:
 Add to app/controllers/sessions_controller.rb:
 ```ruby
 class SessionsController < ApplicationController
-
   def new
   end
 
   def create
-    render 'new'
+    user = User.find_by(email: session_params[:email])
+    if user && user.authenticate(session_params[:password])
+      redirect '/'
+    else
+      flash.now[:danger] = 'Invalid email/password combination'
+      render 'new'
+    end
   end
 
   def destroy
   end
+
+  private
+  def session_params
+    params.require(:session).permit(:email, :password)
+  end
+end
+```
+31. A flash test
+```bash
+$ rails generate integration_test users_login
+```
+
+Add to test/integration/users_login_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersLoginTest < ActionDispatch::IntegrationTest
+  test "login with invalid information" do
+    get login_path
+    assert_response :success
+    assert_template 'sessions/new'
+    post login_path, params: { session: { email: "", password: "" } }
+    assert_template 'sessions/new'
+    assert_not flash.empty?
+    get root_path
+    assert flash.empty?
+  end
 end
 ```
 
-31. 
-32. 
+32. Logging in
+
+Add sessions that persist even after closing the browser to app/controllers/application_controller.rb:
+```ruby
+class ApplicationController < ActionController::Base
+  include SessionsHelper
+end
+```
+
+Add to app/helpers/sessions_helper.rb:
+```
+module SessionsHelper
+
+  # Logs in the given user.
+  def log_in(user)
+    session[:user_id] = user.id
+  end
+end
+```
+
+Add to app/controllers/sessions_controller.rb:
+```ruby
+class SessionsController < ApplicationController
+  def new
+  end
+
+  def create
+    user = User.find_by(email: session_params[:email])
+    if user && user.authenticate(session_params[:password])
+      log_in user
+      redirect_to user
+    else
+      flash.now[:danger] = 'Invalid email/password combination'
+      render 'new'
+    end
+  end
+
+  def destroy
+  end
+
+  private
+  def session_params
+    params.require(:session).permit(:email, :password)
+  end
+end
+
+```
 33.
 34.
 35.
