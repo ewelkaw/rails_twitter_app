@@ -1066,12 +1066,282 @@ class SessionsController < ApplicationController
     params.require(:session).permit(:email, :password)
   end
 end
-
 ```
-33.
-34.
-35.
-36.
+33. Current user
+Add to app/helpers/sessions_helper.rb:
+
+```ruby
+module SessionsHelper
+
+  # Logs in the given user.
+  def log_in(user)
+    session[:user_id] = user.id
+  end
+
+  # Returns the current logged-in user (if any).
+  def current_user
+    if session[:user_id]
+      @current_user ||= User.find_by(id: session[:user_id])
+    end
+  end
+end
+```
+34. Changing the layout links
+
+Add to app/helpers/sessions_helper.rb:
+```ruby
+module SessionsHelper
+
+  # Logs in the given user.
+  def log_in(user)
+    session[:user_id] = user.id
+  end
+
+  # Returns the current logged-in user (if any).
+  def current_user
+    if session[:user_id]
+      @current_user ||= User.find_by(id: session[:user_id])
+    end
+  end
+
+  # Returns true if the user is logged in, false otherwise.
+  def logged_in?
+    !current_user.nil?
+  end
+end
+```
+
+Add to app/views/layouts/_header.html.erb
+```ruby
+<header class="navbar navbar-fixed-top navbar-inverse">
+  <div class="container">
+    <%= link_to "sample app", root_path, id: "logo" %>
+    <nav>
+      <ul class="nav navbar-nav navbar-right">
+        <li><%= link_to "Home", root_path %></li>
+        <li><%= link_to "Help", help_path %></li>
+        <% if logged_in? %>
+          <li><%= link_to "Users", '#' %></li>
+          <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+              Account <b class="caret"></b>
+            </a>
+            <ul class="dropdown-menu">
+              <li><%= link_to "Profile", current_user %></li>
+              <li><%= link_to "Settings", '#' %></li>
+              <li class="divider"></li>
+              <li>
+                <%= link_to "Log out", logout_path, method: :delete %>
+              </li>
+            </ul>
+          </li>
+        <% else %>
+          <li><%= link_to "Log in", login_path %></li>
+        <% end %>
+      </ul>
+    </nav>
+  </div>
+</header>
+```
+```bash
+$ yarn add jquery@3.5.0 bootstrap@3.4.1
+```
+
+Add to config/webpack/environment.js:
+```javascript
+const { environment } = require('@rails/webpacker')
+
+const webpack = require('webpack')
+environment.plugins.prepend('Provide',
+  new webpack.ProvidePlugin({
+    $: 'jquery/src/jquery',
+    jQuery: 'jquery/src/jquery'
+  })
+)
+
+module.exports = environment
+```
+
+Modify app/javascript/packs/application.js:
+```javascript
+require("@rails/ujs").start()
+require("turbolinks").start()
+require("@rails/activestorage").start()
+require("channels")
+require("jquery")
+import "bootstrap"
+```
+
+35. Login upon signup
+
+Modify app/controllers/users_controller.rb
+```ruby
+class UsersController < ApplicationController
+
+  def show
+    @user = User.find(params[:id])
+  end
+
+  def new
+    @user = User.new
+  end
+
+  def create
+    @user = User.new(user_params)
+    if @user.save
+      log_in @user
+      flash[:success] = "Welcome to the Sample App!"
+      redirect_to @user
+    else
+      render 'new'
+    end
+  end
+
+  private
+
+    def user_params
+      params.require(:user).permit(:name, :email, :password,
+                                   :password_confirmation)
+    end
+end
+```
+
+Modify test/test_helper.rb
+```ruby
+ENV['RAILS_ENV'] ||= 'test'
+.
+.
+.
+class ActiveSupport::TestCase
+  fixtures :all
+
+  # Returns true if a test user is logged in.
+  def is_logged_in?
+    !session[:user_id].nil?
+  end
+end
+```
+
+Modify test/integration/users_signup_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersSignupTest < ActionDispatch::IntegrationTest
+  .
+  .
+  .
+  test "valid signup information" do
+    get signup_path
+    assert_difference 'User.count', 1 do
+      post users_path, params: { user: { name:  "Example User",
+                                         email: "user@example.com",
+                                         password:              "password",
+                                         password_confirmation: "password" } }
+    end
+    follow_redirect!
+    assert_template 'users/show'
+    assert is_logged_in?
+  end
+end
+```
+36. Logging out
+
+Modify app/helpers/sessions_helper.rb:
+
+```ruby
+module SessionsHelper
+
+  # Logs in the given user.
+  def log_in(user)
+    session[:user_id] = user.id
+  end
+
+  # Returns the current logged-in user (if any).
+  def current_user
+    if session[:user_id]
+      @current_user ||= User.find_by(id: session[:user_id])
+    end
+  end
+
+  def log_out
+    session.delete(:user_id)
+    @current_user = nil
+  end
+
+  def logged_in?
+    !current_user.nil?
+  end
+end
+```
+
+Modify app/controllers/sessions_controller.rb:
+```ruby
+class SessionsController < ApplicationController
+
+  def new
+  end
+
+  def create
+    user = User.find_by(email: params[:session][:email].downcase)
+    if user && user.authenticate(params[:session][:password])
+      log_in user
+      redirect_to user
+    else
+      flash.now[:danger] = 'Invalid email/password combination'
+      render 'new'
+    end
+  end
+
+  def destroy
+    log_out
+    redirect_to root_url
+  end
+end
+```
+
+Modify test/integration/users_login_test.rb
+```ruby
+require 'test_helper'
+
+class UsersLoginTest < ActionDispatch::IntegrationTest
+
+  def setup
+    @user = users(:michael)
+  end
+
+  test "login with valid email/invalid password" do
+    get login_path
+    assert_template 'sessions/new'
+    post login_path, params: { session: { email:    @user.email,
+                                          password: "invalid" } }
+    assert_not is_logged_in?
+    assert_template 'sessions/new'
+    assert_not flash.empty?
+    get root_path
+    assert flash.empty?
+  end
+
+  test "login with valid information followed by logout" do
+    get login_path
+    post login_path, params: { session: { email:    @user.email,
+                                          password: 'password' } }
+    assert is_logged_in?
+    assert_redirected_to @user
+    follow_redirect!
+    assert_template 'users/show'
+    assert_select "a[href=?]", login_path, count: 0
+    assert_select "a[href=?]", logout_path
+    assert_select "a[href=?]", user_path(@user)
+    delete logout_path
+    assert_not is_logged_in?
+    assert_redirected_to root_url
+    follow_redirect!
+    assert_select "a[href=?]", login_path
+    assert_select "a[href=?]", logout_path,      count: 0
+    assert_select "a[href=?]", user_path(@user), count: 0
+  end
+end
+```
 37.
 38.
 39.
