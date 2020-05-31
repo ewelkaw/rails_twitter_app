@@ -1375,7 +1375,117 @@ class UsersLoginTest < ActionDispatch::IntegrationTest
   end
 end
 ```
-37.
-38.
+37. Advanced login
+```bash
+$ rails generate migration add_remember_digest_to_users remember_digest:string
+$ rails db:migrate
+```
+
+Modify app/models/user.rb:
+```ruby
+class User < ApplicationRecord
+  attr_accessor :remember_token
+  before_save { self.email = email.downcase }
+  validates :name,  presence: true, length: { maximum: 50 }
+  VALID_EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validates :email, presence: true, length: { maximum: 255 },
+                    format: { with: VALID_EMAIL_REGEX },
+                    uniqueness: true
+  has_secure_password
+  validates :password, presence: true, length: { minimum: 6 }
+
+  # Returns the hash digest of the given string.
+  def User.digest(string)
+    cost = ActiveModel::SecurePassword.min_cost ? BCrypt::Engine::MIN_COST :
+                                                  BCrypt::Engine.cost
+    BCrypt::Password.create(string, cost: cost)
+  end
+
+  # Returns a random token.
+  def User.new_token
+    SecureRandom.urlsafe_base64
+  end
+
+  # Remembers a user in the database for use in persistent sessions.
+  def remember
+    self.remember_token = User.new_token
+    update_attribute(:remember_digest, User.digest(remember_token))
+  end
+
+  # Returns true if the given token matches the digest.
+  def authenticated?(remember_token)
+    BCrypt::Password.new(remember_digest).is_password?(remember_token)
+  end
+end
+```
+
+38. Login with remembering
+
+Modify app/controllers/sessions_controller.rb:
+```ruby
+
+  def new
+  end
+
+  def create
+    user = User.find_by(email: params[:session][:email].downcase)
+    if user && user.authenticate(params[:session][:password])
+      reset_session
+      log_in user
+      remember user
+      redirect_to user
+    else
+      flash.now[:danger] = 'Invalid email/password combination'
+      render 'new'
+    end
+  end
+
+  def destroy
+    log_out
+    redirect_to root_url
+  end
+end
+```
+
+Modify app/helpers/sessions_helper.rb:
+```ruby
+module SessionsHelper
+
+  # Logs in the given user.
+  def log_in(user)
+    session[:user_id] = user.id
+  end
+
+  # Remembers a user in a persistent session.
+  def remember(user)
+    user.remember
+    cookies.permanent.encrypted[:user_id] = user.id
+    cookies.permanent[:remember_token] = user.remember_token
+  end
+
+  # Returns the current logged-in user (if any). This is acctually in application_helper
+  def current_user
+    if (user_id = session[:user_id])
+      @current_user ||= User.find_by(id: user_id)
+    elsif (user_id = cookies.encrypted[:user_id])
+      user = User.find_by(id: user_id)
+      if user && user.authenticated?(cookies[:remember_token])
+        log_in user
+        @current_user = user
+      end
+    end
+  end
+
+  # Returns true if the user is logged in, false otherwise.
+  def logged_in?
+    !current_user.nil?
+  end
+
+  # Logs out the current user.
+  def log_out
+    reset_session
+    @current_user = nil
+  end
+```
 39.
 40.
