@@ -1487,5 +1487,125 @@ module SessionsHelper
     @current_user = nil
   end
 ```
-39.
+39. “Remember me” checkbox
+
+Add to app/views/sessions/new.html.erb:
+
+```html
+      <%= f.label :remember_me, class: "checkbox inline" do %>
+        <%= f.check_box :remember_me %>
+        <span>Remember me on this computer</span>
+      <% end %>
+```
+
+Add to test/test_helper.rb:
+```ruby
+  # Log in as a particular user.
+  def log_in_as(user)
+    session[:user_id] = user.id
+  end
+end
+
+class ActionDispatch::IntegrationTest
+
+  # Log in as a particular user.
+  def log_in_as(user, password: 'password', remember_me: '1')
+    post login_path, params: { session: { email: user.email,
+                                          password: password,
+                                          remember_me: remember_me } }
+  end
+```
+
+Modify app/controllers/sessions_controller.rb:
+```ruby
+class SessionsController < ApplicationController
+
+  def new
+  end
+
+  def create
+      user = User.find_by(email: session_params[:email])
+      if user && user.authenticate(session_params[:password])
+        reset_session
+        log_in user
+        remember user
+        params[:session][:remember_me] == '1' ? remember(user) : forget(user)
+        redirect_to current_user #  user_url(user)
+      else
+        flash.now[:danger] = 'Invalid email/password combination'
+        render 'new'
+      end
+    end
+
+  def destroy
+    log_out if logged_in?
+    redirect_to root_url
+  end
+end
+```
+
+Update test/test_helper.rb:
+
+```ruby
+ENV['RAILS_ENV'] ||= 'test'
+.
+.
+.
+class ActiveSupport::TestCase
+  fixtures :all
+
+  # Returns true if a test user is logged in.
+  def is_logged_in?
+    !session[:user_id].nil?
+  end
+
+  # Log in as a particular user.
+  def log_in_as(user)
+    session[:user_id] = user.id
+  end
+end
+
+class ActionDispatch::IntegrationTest
+
+  # Log in as a particular user.
+  def log_in_as(user, password: 'password', remember_me: '1')
+    post login_path, params: { session: { email: user.email,
+                                          password: password,
+                                          remember_me: remember_me } }
+  end
+end
+```
+
+Add to test/integration/users_login_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersLoginTest < ActionDispatch::IntegrationTest
+
+ def setup
+   @user = users(:michael)
+ end
+ .
+ .
+ .
+ test "login with remembering" do
+   log_in_as(@user, remember_me: '1')
+   assert_not_empty cookies[:remember_token]
+ end
+
+ test "login without remembering" do
+   # Log in to set the cookie.
+   log_in_as(@user, remember_me: '1')
+   # Log in again and verify that the cookie is deleted.
+   log_in_as(@user, remember_me: '0')
+   assert_empty cookies[:remember_token]
+ end
+end
+```
+
+Add file test/helpers/sessions_helper_test.rb:
+```ruby
+
+```
+
 40.
