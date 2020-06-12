@@ -33,5 +33,7 @@ jobs:
       run: sudo apt-get install libsqlite3-dev
     - name: Install dependencies
       run: bundle install --with test
+    - name: Install js deps
+      run: yarn install
     - name: Run tests
       run: rails test
