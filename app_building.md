@@ -2025,3 +2025,141 @@ Add tests to test/integration/users_index_test.rb by `rails generate integration
 ```
 
 44. Administrative users
+
+We need an admin :
+```bash
+$ rails generate migration add_admin_to_users admin:boolean
+$ rails db:migrate
+```
+
+Then add to seeds.rb for User.create `admin: true` and provide:
+```bash
+$ rails db:migrate:reset
+$ rails db:seed
+```
+
+Modify test/controllers/users_controller_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersControllerTest < ActionDispatch::IntegrationTest
+
+  def setup
+    @user       = users(:michael)
+    @other_user = users(:archer)
+  end
+  .
+  .
+  .
+  test "should redirect update when not logged in" do
+    patch user_path(@user), params: { user: { name: @user.name,
+                                              email: @user.email } }
+    assert_not flash.empty?
+    assert_redirected_to login_url
+  end
+
+  test "should not allow the admin attribute to be edited via the web" do
+    log_in_as(@other_user)
+    assert_not @other_user.admin?
+    patch user_path(@other_user), params: {
+                                    user: { password:              "password",
+                                            password_confirmation: "password",
+                                            admin: FILL_IN } }
+    assert_not @other_user.FILL_IN.admin?
+  end
+  .
+  .
+  .
+end
+```
+
+Add to app/controllers/users_controller.rb:
+```ruby
+class UsersController < ApplicationController
+ before_action :logged_in_user, only: [:index, :edit, :update, :destroy]
+ before_action :admin_user,     only: :destroy
+ .
+ .
+ .
+ def destroy
+   User.find(params[:id]).destroy
+   flash[:success] = "User deleted"
+   redirect_to users_url
+ end
+
+ private
+ .
+ .
+ .
+# Confirms an admin user.
+  def admin_user
+    redirect_to(root_url) unless current_user.admin?
+  end
+end
+```
+
+Add to test/controllers/users_controller_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersControllerTest < ActionDispatch::IntegrationTest
+
+ def setup
+   @user       = users(:michael)
+   @other_user = users(:archer)
+ end
+ .
+ .
+ .
+ test "should redirect destroy when not logged in" do
+   assert_no_difference 'User.count' do
+     delete user_path(@user)
+   end
+   assert_redirected_to login_url
+ end
+
+ test "should redirect destroy when logged in as a non-admin" do
+   log_in_as(@other_user)
+   assert_no_difference 'User.count' do
+     delete user_path(@user)
+   end
+   assert_redirected_to root_url
+ end
+end
+```
+
+Modify also test/integration/users_index_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersIndexTest < ActionDispatch::IntegrationTest
+
+  def setup
+    @admin     = users(:michael)
+    @non_admin = users(:archer)
+  end
+
+  test "index as admin including pagination and delete links" do
+    log_in_as(@admin)
+    get users_path
+    assert_template 'users/index'
+    assert_select 'div.pagination'
+    first_page_of_users = User.paginate(page: 1)
+    first_page_of_users.each do |user|
+      assert_select 'a[href=?]', user_path(user), text: user.name
+      unless user == @admin
+        assert_select 'a[href=?]', user_path(user), text: 'delete'
+      end
+    end
+    assert_difference 'User.count', -1 do
+      delete user_path(@non_admin)
+    end
+  end
+
+  test "index as non-admin" do
+    log_in_as(@non_admin)
+    get users_path
+    assert_select 'a', text: 'delete', count: 0
+  end
+end
+```
