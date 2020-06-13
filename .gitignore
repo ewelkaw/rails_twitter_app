@@ -35,5 +35,7 @@
 yarn-debug.log*
 .yarn-integrity
 
+.idea/
+
 # Ignore test created files
 db/test.*
