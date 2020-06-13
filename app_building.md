@@ -1781,7 +1781,25 @@ class UsersController < ApplicationController
   before_action :logged_in_user, only: [:edit, :update]
 
 ...
-    
+  def edit
+      @user = User.find(params[:id])
+      if current_user != @user
+        redirect_to root_url
+      end
+    end
+  
+    def update
+      @user = User.find(params[:id])
+      if current_user != @user
+          redirect_to root_url
+      elsif @user.update(user_params)
+        flash[:success] = "Profile updated"
+        redirect_to @user
+      else
+        render 'edit'
+      end
+   
+ 
   private
 
     def user_params
@@ -1797,7 +1815,213 @@ class UsersController < ApplicationController
         flash[:danger] = "Please log in."
         redirect_to login_url
       end
+
+
     end
 ```
+
+Modify test/controllers/users_controller_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersControllerTest < ActionDispatch::IntegrationTest
+
+  def setup
+    @user       = users(:michael)
+    @other_user = users(:archer)
+  end
+  .
+  .
+  .
+  test "should redirect edit when logged in as wrong user" do
+    log_in_as(@other_user)
+    get edit_user_path(@user)
+    assert flash.empty?
+    assert_redirected_to root_url
+  end
+
+  test "should redirect update when logged in as wrong user" do
+    log_in_as(@other_user)
+    patch user_path(@user), params: { user: { name: @user.name,
+                                              email: @user.email } }
+    assert flash.empty?
+    assert_redirected_to root_url
+  end
+end
+```
 42. Users index
-43. Administrative users
+
+Add to test/controllers/users_controller_test.rb:
+```ruby
+require 'test_helper'
+
+class UsersControllerTest < ActionDispatch::IntegrationTest
+
+  def setup
+    @user       = users(:michael)
+    @other_user = users(:archer)
+  end
+
+  test "should get new" do
+    get signup_path
+    assert_response :success
+  end
+
+  test "should redirect index when not logged in" do
+    get users_path
+    assert_redirected_to login_url
+  end
+  .
+  .
+  .
+end
+```
+
+Add to app/controllers/users_controller.rb:
+```ruby
+class UsersController < ApplicationController
+  before_action :logged_in_user, only: [:index, :edit, :update]
+  before_action :correct_user,   only: [:edit, :update]
+
+  def index
+    @users = User.all
+  end
+
+  def show
+    @user = User.find(params[:id])
+  end
+  .
+  .
+  .
+end
+```
+
+Add to app/views/users/index.html.erb:
+```html
+       <% provide(:title, 'All users') %>
+       <h1>All users</h1>
+       
+       <ul class="users">
+         <% @users.each do |user| %>
+           <li>
+             <%= gravatar_for user, size: 50 %>
+             <%= link_to user.name, user %>
+           </li>
+         <% end %>
+       </ul>
+```
+
+Modify app/views/layouts/_header.html.erb:
+```html
+ <header class="navbar navbar-fixed-top navbar-inverse">
+         <div class="container">
+           <%= link_to "sample app", root_path, id: "logo" %>
+           <nav>
+             <ul class="nav navbar-nav navbar-right">
+               <li><%= link_to "Home", root_path %></li>
+               <li><%= link_to "Help", help_path %></li>
+               <% if logged_in? %>
+                 <li><%= link_to "Users", users_path %></li>
+                 <li class="dropdown">
+                   <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                     Account <b class="caret"></b>
+                   </a>
+                   <ul class="dropdown-menu">
+                     <li><%= link_to "Profile", current_user %></li>
+                     <li><%= link_to "Settings", edit_user_path(current_user) %></li>
+                     <li class="divider"></li>
+                     <li>
+                       <%= link_to "Log out", logout_path, method: :delete %>
+                     </li>
+                   </ul>
+                 </li>
+               <% else %>
+                 <li><%= link_to "Log in", login_path %></li>
+               <% end %>
+             </ul>
+           </nav>
+         </div>
+       </header>
+```
+      
+Add faker to Gemfile and install it, then add to db/seeds.rb:
+```ruby
+# Create a main sample user.
+User.create!(name:  "Example User",
+email: "example@railstutorial.org",
+password:              "foobar",
+password_confirmation: "foobar")
+
+# Generate a bunch of additional users.
+99.times do |n|
+name  = Faker::Name.name
+email = "example-#{n+1}@railstutorial.org"
+password = "password"
+User.create!(name:  name,
+email: email,
+password:              password,
+password_confirmation: password)
+end
+```
+
+Then:
+```bash
+$ rails db:migrate:reset
+$ rails db:seed
+```
+
+43. Pagination
+Add to Gemfile `will_paginate` and `bootstrap-will_paginate` and modify app/views/users/index.html.erb:
+```html
+<% provide(:title, 'All users') %>
+<h1>All users</h1>
+
+<%= will_paginate %>
+
+<ul class="users">
+  <% @users.each do |user| %>
+    <li>
+      <%= gravatar_for user, size: 50 %>
+      <%= link_to user.name, user %>
+    </li>
+  <% end %>
+</ul>
+
+<%= will_paginate %>
+```
+
+Change also app/controllers/users_controller.rb:
+```ruby
+class UsersController < ApplicationController
+  before_action :logged_in_user, only: [:index, :edit, :update]
+  .
+  .
+  .
+  def index
+    @users = User.paginate(page: params[:page])
+  end
+```
+
+Add tests to test/integration/users_index_test.rb by `rails generate integration_test users_index`:
+```ruby
+ require 'test_helper'
+ 
+ class UsersIndexTest < ActionDispatch::IntegrationTest
+ 
+   def setup
+     @user = users(:michael)
+   end
+ 
+   test "index including pagination" do
+     log_in_as(@user)
+     get users_path
+     assert_template 'users/index'
+     assert_select 'div.pagination'
+     User.paginate(page: 1).each do |user|
+       assert_select 'a[href=?]', user_path(user), text: user.name
+     end
+   end
+ end
+```
+
+44. Administrative users

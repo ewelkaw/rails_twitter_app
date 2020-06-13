@@ -1,8 +1,13 @@
 class UsersController < ApplicationController
+  include ApplicationHelper
   include SessionsHelper
-  before_action :logged_in_user, only: [:edit, :update]
+  before_action :logged_in_user, only: [:edit, :update, :index]
 
   def index
+    @users = User.paginate(page: params[:page])
+    # if !logged_in?
+    #   redirect_to login_url
+    # end
   end
 
   def show
@@ -26,17 +31,22 @@ class UsersController < ApplicationController
 
   def edit
     @user = User.find(params[:id])
+    if current_user != @user
+      redirect_to root_url
+    end
   end
 
   def update
     @user = User.find(params[:id])
-    if @user.update(user_params)
+    if current_user != @user
+        redirect_to root_url
+    elsif @user.update(user_params)
       flash[:success] = "Profile updated"
       redirect_to @user
     else
       render 'edit'
+    end
   end
-end
 
   private
 
