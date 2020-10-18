@@ -2163,3 +2163,259 @@ class UsersIndexTest < ActionDispatch::IntegrationTest
   end
 end
 ```
+ 
+PUSHING TO HEROKU (from master):
+```bash
+$ git pull
+$ rails test
+$ git push heroku
+$ heroku pg:reset DATABASE
+$ heroku run rails db:migrate
+$ heroku run rails db:seed
+
+```
+
+45. Account activation
+```bash
+$ rails generate controller AccountActivations
+$ rails generate migration add_activation_to_users activation_digest:string activated:boolean activated_at:datetime
+$ rails db:migrate
+```
+
+Add to config/routes.rb:
+```ruby
+Rails.application.routes.draw do
+ root   'static_pages#home'
+ get    '/help',    to: 'static_pages#help'
+ get    '/about',   to: 'static_pages#about'
+ get    '/contact', to: 'static_pages#contact'
+ get    '/signup',  to: 'users#new'
+ get    '/login',   to: 'sessions#new'
+ post   '/login',   to: 'sessions#create'
+ delete '/logout',  to: 'sessions#destroy'
+ resources :users
+ resources :account_activations, only: [:edit]
+end
+```
+
+Modify app/models/user.rb:
+```ruby
+class User < ApplicationRecord
+ attr_accessor :remember_token, :activation_token
+ before_save   :downcase_email
+ before_create :create_activation_digest
+ validates :name,  presence: true, length: { maximum: 50 }
+ .
+ .
+ .
+ private
+
+   # Converts email to all lower-case.
+   def downcase_email
+     self.email = email.downcase
+   end
+
+   # Creates and assigns the activation token and digest.
+   def create_activation_digest
+     self.activation_token  = User.new_token
+     self.activation_digest = User.digest(activation_token)
+   end
+end
+```
+
+Modify db/seeds.rb:
+```ruby
+# Create a main sample user.
+User.create!(name:  "Example User",
+            email: "example@railstutorial.org",
+            password:              "foobar",
+            password_confirmation: "foobar",
+            admin:     true,
+            activated: true,
+            activated_at: Time.zone.now)
+
+# Generate a bunch of additional users.
+99.times do |n|
+ name  = Faker::Name.name
+ email = "example-#{n+1}@railstutorial.org"
+ password = "password"
+ User.create!(name:  name,
+             email: email,
+             password:              password,
+             password_confirmation: password,
+             activated: true,
+             activated_at: Time.zone.now)
+end
+```
+
+```bash
+$ rails db:migrate:reset
+$ rails db:seed
+```
+
+Add mailer templates:
+```bash
+$ rails generate mailer UserMailer account_activation password_reset
+```
+
+Modify generated mailer in app/mailers/user_mailer.rb:
+```ruby
+class UserMailer < ApplicationMailer
+
+  def account_activation(user)
+    @user = user
+    mail to: user.email, subject: "Account activation"
+  end
+
+  def password_reset
+    @greeting = "Hi"
+
+    mail to: "to@example.org"
+  end
+end
+```
+ 
+
+Modify generated User mailer in app/mailers/application_mailer.rb:
+```ruby
+class ApplicationMailer < ActionMailer::Base
+  default from: "noreply@example.com"
+  layout 'mailer'
+end
+```
+ 
+To get the email previews modify config/environments/development.rb:
+```ruby
+  config.action_mailer.raise_delivery_errors = false
+
+  host = 'localhost:3000'                     # Local server
+  # Use this if developing on localhost.
+  config.action_mailer.default_url_options = { host: host, protocol: 'http' }
+```
+
+Update test/mailers/previews/user_mailer_preview.rb:
+```ruby
+# Preview all emails at http://localhost:3000/rails/mailers/user_mailer
+class UserMailerPreview < ActionMailer::Preview
+
+  # Preview this email at
+  # http://localhost:3000/rails/mailers/user_mailer/account_activation
+  def account_activation
+    user = User.first
+    user.activation_token = User.new_token
+    UserMailer.account_activation(user)
+  end
+
+  # Preview this email at
+  # http://localhost:3000/rails/mailers/user_mailer/password_reset
+  def password_reset
+    UserMailer.password_reset
+  end
+end
+```
+
+Modify test/mailers/user_mailer_test.rb
+```ruby
+require 'test_helper'
+
+class UserMailerTest < ActionMailer::TestCase
+
+ test "account_activation" do
+   user = users(:michael)
+   user.activation_token = User.new_token
+   mail = UserMailer.account_activation(user)
+   assert_equal "Account activation", mail.subject
+   assert_equal [user.email], mail.to
+   assert_equal ["noreply@example.com"], mail.from
+   assert_match user.name,               mail.body.encoded
+   assert_match user.activation_token,   mail.body.encoded
+   assert_match CGI.escape(user.email),  mail.body.encoded
+ end
+end
+```
+
+Add to config/environments/test.rb:
+```ruby
+Rails.application.configure do
+ .
+ .
+ .
+ config.action_mailer.delivery_method = :test
+ config.action_mailer.default_url_options = { host: 'example.com' }
+ .
+ .
+ .
+end
+```
+
+Update app/controllers/users_controller.rb:
+```ruby
+
+       class UsersController < ApplicationController
+         .
+         .
+         .
+         def create
+           @user = User.new(user_params)
+           if @user.save
+             UserMailer.account_activation(@user).deliver_now
+             flash[:info] = "Please check your email to activate your account."
+             redirect_to root_url
+           else
+             render 'new'
+           end
+         end
+         .
+         .
+         .
+       end
+```
+
+Comment two lines in test/integration/users_signup_test.rb
+```ruby
+require 'test_helper'
+     
+     class UsersSignupTest < ActionDispatch::IntegrationTest
+     
+       test "invalid signup information" do
+         get signup_path
+         assert_no_difference 'User.count' do
+           post users_path, params: { user: { name:  "",
+                                              email: "user@invalid",
+                                              password:              "foo",
+                                              password_confirmation: "bar" } }
+         end
+         assert_template 'users/new'
+         assert_select 'div#error_explanation'
+         assert_select 'div.field_with_errors'
+       end
+     
+       test "valid signup information" do
+         get signup_path
+         assert_difference 'User.count', 1 do
+           post users_path, params: { user: { name:  "Example User",
+                                              email: "user@example.com",
+                                              password:              "password",
+                                              password_confirmation: "password" } }
+         end
+         follow_redirect!
+         # assert_template 'users/show'
+         # assert is_logged_in?
+       end
+     end
+```
+        
+Modify authenticated? method app/models/user.rb:
+```ruby
+  # Returns true if the given token matches the digest.
+  def authenticated?(attribute, token)
+    digest = send("#{attribute}_digest")
+    return false if digest.nil?
+    BCrypt::Password.new(digest).is_password?(token)
+  end
+```
+46.
+47.
+48.
+49.
+50.

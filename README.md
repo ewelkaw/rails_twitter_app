@@ -45,7 +45,7 @@ $ rails s
 For more information, see the
 [*Ruby on Rails Tutorial* book](https://www.railstutorial.org/book).
 
-Rwgular heroku deployment
+Regular heroku deployment
 ```bash
 $ git commit -am "Info about commit"
 $ git push
